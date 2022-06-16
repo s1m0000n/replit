@@ -1,0 +1,6 @@
+packages:
+- .
+resolver:
+  compiler: ghc-9.2.2
+extra-deps:
+- ansi-terminal-0.6.2.3
