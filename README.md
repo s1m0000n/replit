@@ -128,6 +128,9 @@ So, this project started as a small quality of life improvement for me and I am 
   - Nerdy project for shell power users is fun to write using a geeky language
 - Personal interest to further learn it
 
+For those who want to start learning Haskell [and contribute]:
+there is a great brief tutorial [Learn X in Y minutes](https://learnxinyminutes.com/docs/haskell/)
+
 ### Why rebuild to config?
 
 Right now it's such a tiny tool that adding reading configs from something
