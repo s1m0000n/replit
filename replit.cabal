@@ -37,6 +37,7 @@ library
     , directory
     , process
     , time
+    , unix
   default-language: Haskell2010
 
 executable replit
@@ -53,6 +54,7 @@ executable replit
     , process
     , replit
     , time
+    , unix
   default-language: Haskell2010
 
 test-suite replit-test
@@ -70,4 +72,5 @@ test-suite replit-test
     , process
     , replit
     , time
+    , unix
   default-language: Haskell2010

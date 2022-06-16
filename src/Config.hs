@@ -8,4 +8,4 @@ promptPathColor = Blue
 promptFmt = "[$path] $cmd $predefinedArgs $sep " -- TODO: use this for prompt
 
 shellPrefix = "!"
-builtInCommandPrefix = "!!"
+builtInCommandPrefix = ":"

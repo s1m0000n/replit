@@ -2,6 +2,7 @@ module Main where
 
 import System.Environment (getArgs)
 import Lib
+import System.Posix (installHandler, keyboardSignal, Handler (Catch))
 
 main :: IO ()
 main = do
@@ -13,6 +14,7 @@ main = do
       otherwise -> do
         let executable = head args
         let options = tail args
+        installHandler keyboardSignal (Catch $ handleCtrlC executable options) Nothing
         -- TODO: https://stackoverflow.com/questions/13441676/how-to-write-ctrl-c-handler-in-haskell
         startInfo executable options
         repl executable options

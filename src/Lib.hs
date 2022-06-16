@@ -54,6 +54,12 @@ cputLn color text = do
   putStrLn text
   setSGR [Reset]
 
+handleCtrlC :: String -> [String] -> IO ()
+handleCtrlC executable options = do
+  putStrLn ""
+  putWarnLn "To quit please use '!! q' (see more in help)"
+  repl executable options
+
 mult lst times = concat $ replicate times lst
 
 showArgs :: [String] -> String

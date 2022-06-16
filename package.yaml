@@ -25,6 +25,7 @@ dependencies:
 - process
 - time
 - directory
+- unix
 
 library:
   source-dirs: src
