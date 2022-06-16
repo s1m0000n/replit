@@ -7,6 +7,8 @@ import System.Process
 import System.Directory
 import System.Exit (exitSuccess)
 import Config
+import Data.List (maximumBy)
+import Data.Function (on)
 
 replitMsg :: String -> String -> String
 replitMsg "" text = "[replit] " ++ text
@@ -128,6 +130,36 @@ putPrompt executable predefinedArgs = do
        cput promptCommandColor cmd
        cput promptSeparatorColor $ pad " " promptSeparator
 
+trimPrefix :: Eq a => [a] -> [a] -> (Bool, [a])
+trimPrefix (p:ps) (x:xs) 
+  | p == x = trimPrefix ps xs
+  | otherwise = (False, xs)
+trimPrefix [] xs = (True, xs)
+
+specialPrefixes :: [String]
+specialPrefixes = [shellPrefix, commandPrefix]
+
+findPrefix :: [Char] -> Maybe (String, String)
+findPrefix xs = 
+  if length matchedPrefixesMap == 0
+     then Nothing
+     else if (body == "") then Nothing else Just (prefix, body)
+    where
+      matchedPrefixesMap = map (\(_, k, v) -> (k, v)) 
+        $ filter (\(b, k, v) -> b == True) 
+        $ zipWith (\k (b, v) -> (b, k, v)) specialPrefixes 
+        $ map (\ps -> trimPrefix ps xs) specialPrefixes
+      (prefix, body) = maximumBy (compare `on` (\(k, v) -> length v)) matchedPrefixesMap 
+
+tokenize :: String -> [String]
+tokenize text = case (findPrefix firstToken) of
+    Nothing -> tokens
+    Just (tokenPrefix, tokenTail) -> tokenPrefix:tokenTail:otherTokens
+ where 
+  tokens = words text
+  firstToken = head tokens
+  otherTokens = tail tokens
+  
 repl :: String -> [String] -> IO()
 repl executable predefinedArgs = do
   putPrompt executable predefinedArgs
@@ -136,20 +168,12 @@ repl executable predefinedArgs = do
   if line == ""
      then do
        exec executable predefinedArgs
-       repl executable predefinedArgs
      else do
-       let tokens = words line
+       let tokens = tokenize line
        let firstToken = head tokens
-       if firstToken == shellPrefix
-          then do
-            exec (head $ tail tokens) (tail $ tail tokens)
-            repl executable predefinedArgs
-          else if firstToken == builtInCommandPrefix
-            then do
-              execSpecial (head $ tail tokens) executable predefinedArgs (tail $ tail tokens)
-              repl executable predefinedArgs
-            else do
-              exec executable $ predefinedArgs ++ tokens
-              repl executable predefinedArgs
-
+       case firstToken of
+         _ | firstToken == shellPrefix -> exec (head $ tail tokens) (tail $ tail tokens)
+         _ | firstToken == commandPrefix -> execSpecial (head $ tail tokens) executable predefinedArgs (tail $ tail tokens)
+         _ -> exec executable $ predefinedArgs ++ tokens 
+  repl executable predefinedArgs
 
