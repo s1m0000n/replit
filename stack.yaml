@@ -3,4 +3,7 @@ packages:
 resolver:
   compiler: ghc-9.2.2
 extra-deps:
-- ansi-terminal-0.6.2.3
+- isocline-1.0.9
+- text-1.2.5.0
+- ansi-terminal-0.11.3
+- colour-2.3.6

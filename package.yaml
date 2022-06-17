@@ -26,6 +26,8 @@ dependencies:
 - time
 - directory
 - unix
+- isocline
+- text
 
 library:
   source-dirs: src

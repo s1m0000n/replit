@@ -1,7 +1,9 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Lib where
 
 import System.Console.ANSI
-import GHC.IO.Handle.FD (stdout)
+import GHC.IO.Handle.FD (stdout, stdin)
 import GHC.IO.Handle (hFlush)
 import System.Process
 import System.Directory
@@ -9,10 +11,18 @@ import System.Exit (exitSuccess)
 import Config
 import Data.List (maximumBy)
 import Data.Function (on)
+import System.Console.Isocline (readline, historyAdd)
+import qualified Data.Text as T
+import Data.Text (unpack)
 
 replitMsg :: String -> String -> String
 replitMsg "" text = "[replit] " ++ text
 replitMsg prefix text = '[':prefix ++ "@replit] " ++ text
+
+sbbpad :: [Char] -> [Char] -> [Char]
+sbbpad properties text = "[" ++ properties ++ "]" ++ text ++ "[/" ++ properties ++ "]"
+bbpad :: T.Text -> T.Text -> T.Text
+bbpad properties text = T.concat ["[", properties, "]", text, "[/", properties, "]"]
 
 putErrLn :: String -> IO ()
 putErrLn text = do
@@ -64,11 +74,11 @@ handleCtrlC executable options = do
 
 mult lst times = concat $ replicate times lst
 
-showArgs :: [String] -> String
-showArgs args = if length args > 0 then (foldl1 (\acc x -> acc ++ ", " ++ x) args) else ""
 
-showHowCalledArgs :: [String] -> String
-showHowCalledArgs args = if length args > 0 then (foldl1 (\acc x -> acc ++ " " ++ x) args) else ""
+showCallArgsStr args = if length args > 0 then (foldl1 (\acc x -> acc ++ " " ++ x) args) else ""
+
+
+showCallArgs args = if length args > 0 then (foldl1 (\acc x -> foldl1 T.append [acc, " ", x]) args) else ""
 
 pad :: [a] -> [a] -> [a]
 pad _ [] = []
@@ -79,9 +89,9 @@ startInfo executable args = do
   putInfo "[info@replit] replit will run"
   putSpecial $ ' ':executable
   if length args > 0
-     then putSpecial $ pad " " $ showHowCalledArgs args
+     then putSpecial $ pad " " $ showCallArgsStr args
      else putStr " "
-  putInfo $ "[user specified args after '" ++ promptSeparator ++ "']"
+  putInfo $ "[user specified args after '" ++ (T.unpack promptMarker) ++ "']"
   putStrLn ""
   putInfoLn "The basic commands are !h to print help, !q to quit, !sh [command] to run any shell command (w/o prefix)"
 
@@ -107,28 +117,15 @@ execSpecial "q" _ _ [] = do
 execSpecial "h" executable predefinedArgs [] = help
 -- execSpecial "h" executable predefinedArgs [cmd] = commandHelp cmd
 execSpecial "l" executable predefinedArgs [name, "=", value] = putErrLn $ "Implement define " ++ name ++ " = '" ++ value ++ "'"
-execSpecial "btw_i_use_arch" _ _ _ =  do
-  setSGR [SetColor Foreground Dull Black]
-  setSGR [SetColor Background Vivid Red]
-  putStrLn $ "R" `mult` 20
-  setSGR [SetColor Background Vivid Yellow]
-  putStrLn $ "A" `mult` 20
-  setSGR [Reset]
 execSpecial command executable predefinedArgs args = do
-  putErrLn $  "Unknown special command " ++ command ++ " with args " ++ (showArgs args) ++ ". Please use one of the supported commands"
+  putErrLn $  "Unknown special command " ++ command ++ " with args " ++ (show args) ++ ". Please use one of the supported commands"
   help
 
-putPrompt :: String -> [String] -> IO ()
-putPrompt executable predefinedArgs = do
-  let argstr = showHowCalledArgs predefinedArgs
-  let cmd = executable ++ if argstr == "" then "" else " " ++ argstr
-  pwd <- getCurrentDirectory
-  cput promptPathColor $ "[" ++ pwd ++ "] "
-  if cmd == ""
-     then cput promptSeparatorColor $ promptSeparator ++ " "
-     else do
-       cput promptCommandColor cmd
-       cput promptSeparatorColor $ pad " " promptSeparator
+mapReplace :: Foldable t => t (T.Text, T.Text) -> T.Text -> T.Text
+mapReplace repls text = foldl (\t (k, v) -> T.replace k v t) text repls
+
+prompt :: T.Text -> T.Text -> [T.Text] -> T.Text
+prompt pwd cmd args = mapReplace [("$pwd", pwd), ("$cmd", cmd), ("$args", showCallArgs args)] promptFmt
 
 trimPrefix :: Eq a => [a] -> [a] -> (Bool, [a])
 trimPrefix (p:ps) (x:xs) 
@@ -162,9 +159,12 @@ tokenize text = case (findPrefix firstToken) of
   
 repl :: String -> [String] -> IO()
 repl executable predefinedArgs = do
-  putPrompt executable predefinedArgs
-  hFlush stdout
-  line <- getLine
+  path <- getCurrentDirectory
+  line <- readline $ (++ " ") $ T.unpack $ prompt 
+      (bbpad promptPwdColor $ T.pack path)
+      (bbpad promptCmdColor $ T.pack executable)
+      (map (bbpad promptArgsColor . T.pack) predefinedArgs)
+  historyAdd line
   if line == ""
      then do
        exec executable predefinedArgs
