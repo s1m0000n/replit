@@ -4,20 +4,29 @@ import GHC.IO.Handle.FD (stdout, stdin)
 import GHC.IO.Handle (hFlush)
 import System.Process (createProcess, proc, shell, waitForProcess)
 import System.Directory (doesFileExist, makeRelativeToCurrentDirectory)
-import System.Exit (exitSuccess)
+import System.Exit (exitSuccess, ExitCode)
 import Config
 import System.Console.Isocline (readline, historyAdd, putFmt, putFmtLn, setHistory, setPromptMarker)
 import Utils 
 import State
 import Control.Exception (handle)
 import InputProcessing (tokenize)
-import System.Posix (installHandler, keyboardSignal, Handler (Catch), getEnvironment, getEnv)
+import System.Posix (installHandler, keyboardSignal, Handler (Catch), getEnvironment, getEnv, changeWorkingDirectory)
+import Data.List (isSubsequenceOf)
 
+err :: String -> String
 err = bbcodePad errorColor . ("\\[replit error] " ++)
+
+warn :: String -> String
 warn = bbcodePad warningColor . ("\\[replit warning] " ++)
+
+info :: String -> String
 info = bbcodePad infoColor . ("\\[replit info] " ++)
+
+highlighted :: String -> String
 highlighted = bbcodePad highlightColor
 
+handleCtrlC :: State -> IO ()
 handleCtrlC state = do
   putStrLn ""
   putFmtLn $ warn "To quit please use '!! q' (more info in help)"
@@ -35,35 +44,31 @@ startInfo state = do
   putFmtLn $ bbcodePad infoColor $ "\\[optional user specified args after '" ++ promptMarker ++ "']"
   putFmtLn $ info $ "The basic commands are " ++ builtInCommandPrefix ++ "h to print help, " ++ builtInCommandPrefix ++ "q to quit, !\\[command] to run any shell command (w/o predefined stuff)"
 
-exec :: State -> Args -> IO State
-exec state rightArgs = do
-  let args = showListSpaces $ leftArgs state ++ rightArgs
-  let shellLine = command state ++ " " ++ args
+exec :: Command -> Args -> IO ExitCode
+exec cmd args = do
+  if cmd == "cd"
+     then changeWorkingDirectory (head args)
+     else return ()
+  let shellLine = cmd ++ " " ++ (showListSpaces args)
   maybeShell <- getEnv "SHELL"
   (_, _, _, handle) <- case maybeShell of
                          Nothing -> createProcess $ shell shellLine
                          Just sh -> createProcess $ proc sh ["-c", shellLine]
-  waitForProcess handle
-  return state
+  waitForProcess handle -- sometime move it and make async execution? 
 
 execBuiltIn :: State -> Command -> Args -> IO State
-execBuiltIn _ "q" _ = do
-  putFmtLn $ info "Quitting..."
-  exitSuccess
-
-execBuiltIn state "h" [] = do
-  putFmtLn $ info "replit - A tiny tool to make your favorite CLI-apps interactive"
-  putFmtLn $ err "Help is not implemented yet :("
-  return state
-
-execBuiltIn state command args = do
-  putFmtLn 
-     $ (err "Unknown built-in command ")
-    ++ (highlighted command)
-    ++ (err " with args ")
-    ++ (highlighted $ showListSpaces args) 
-    ++ (err ". Please help to see a list of valid commands.")
-  return state
+execBuiltIn state cmd args
+  | cmd `isSubsequenceOf` "quit" = do
+      putFmtLn $ info "Quitting..."
+      exitSuccess
+  | cmd `isSubsequenceOf` "help" = do
+      case args of
+        [] ->  putFmtLn $ err "Help is not implemented yet :("
+        _ -> putFmtLn $ err "Command help is not implemented yet"
+      return state
+  | otherwise = do
+      putFmtLn $ (err "Unknown built-in command ") ++ (highlighted cmd) ++ (err " with args ") ++ (highlighted $ showListSpaces args) ++ (err ". Please help to see a list of valid commands.")
+      return state
 
 runCommandLine :: State -> IO String
 runCommandLine state = do
@@ -81,9 +86,10 @@ initHistory state = if enableHistory
             exists <- doesFileExist path
             if not exists 
                then do
-                 exec state{command = "mkdir", leftArgs = []} ["-p", "$(dirname " ++ path ++ ")"]
-                 exec state{command = "touch", leftArgs = []} [path]
-               else return state
+                 exec "mkdir" ["-p", "$(dirname " ++ path ++ ")"]
+                 exec "touch" [path]
+                 return ()
+               else return ()
             return path
            else return "1"
        setHistory path historySize
@@ -92,17 +98,22 @@ initHistory state = if enableHistory
 
 repl :: State -> IO ()
 repl state = do
-  -- env <- if useEnvironment && updateEnvironment then getEnvironment else return []
   line <- runCommandLine state
   state <- if line == ""
-     then exec state []
+     then do
+       exec (command state) (leftArgs state)
+       return state
      else let
        tokens = tokenize line
        firstToken = head tokens
      in case firstToken of
-       _ | firstToken == shellPrefix -> exec state{command = head $ tail tokens, leftArgs = tail $ tail tokens} []
+       _ | firstToken == shellPrefix -> do
+         exec (head $ tail tokens) $ tail $ tail tokens
+         return state
        _ | firstToken == builtInCommandPrefix -> execBuiltIn state (head $ tail tokens) (tail $ tail tokens)
-       _ -> exec state tokens 
+       _ -> do
+         exec (command state) $ (leftArgs state) ++ tokens
+         return state
   repl state
 
 runRepl :: Command -> Args -> IO ()
