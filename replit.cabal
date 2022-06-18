@@ -26,7 +26,10 @@ source-repository head
 library
   exposed-modules:
       Config
+      InputProcessing
       Lib
+      State
+      Utils
   other-modules:
       Paths_replit
   hs-source-dirs:
